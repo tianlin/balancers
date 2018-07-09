@@ -4,7 +4,7 @@
 package balancers
 
 import (
-	"net/http"
+	"net"
 	"net/url"
 	"sync"
 	"time"
@@ -81,27 +81,10 @@ func (c *HttpConnection) checkBroken() {
 	c.Lock()
 	defer c.Unlock()
 
-	// TODO(oe) Can we use HEAD?
-	req, err := http.NewRequest("GET", c.url.String(), nil)
-	if err != nil {
+	if _, err := net.DialTimeout("tcp", c.url.Host, 5*time.Second); err != nil {
 		c.broken = true
-		return
-	}
-	// Add UA to heartbeat requests.
-	req.Header.Add("User-Agent", UserAgent)
-
-	// Use a standard HTTP client with a timeout of 5 seconds.
-	cl := &http.Client{Timeout: 5 * time.Second}
-	res, err := cl.Do(req)
-	if err == nil {
-		defer res.Body.Close()
-		if res.StatusCode == http.StatusOK {
-			c.broken = false
-		} else {
-			c.broken = true
-		}
 	} else {
-		c.broken = true
+		c.broken = false
 	}
 }
 
