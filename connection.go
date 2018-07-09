@@ -4,7 +4,7 @@
 package balancers
 
 import (
-	"net"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -29,14 +29,16 @@ type HttpConnection struct {
 	broken            bool
 	heartbeatDuration time.Duration
 	heartbeatStop     chan bool
+	client            *http.Client
 }
 
 // NewHttpConnection creates a new HTTP connection to the given URL.
-func NewHttpConnection(url *url.URL) *HttpConnection {
+func NewHttpConnection(url *url.URL, client *http.Client) *HttpConnection {
 	c := &HttpConnection{
 		url:               url,
 		heartbeatDuration: DefaultHeartbeatDuration,
 		heartbeatStop:     make(chan bool),
+		client:            client,
 	}
 	c.checkBroken()
 	go c.heartbeat()
@@ -81,10 +83,23 @@ func (c *HttpConnection) checkBroken() {
 	c.Lock()
 	defer c.Unlock()
 
-	if _, err := net.DialTimeout("tcp", c.url.Host, 5*time.Second); err != nil {
+	req, err := http.NewRequest(http.MethodPost, c.url.String(), nil)
+	if err != nil {
 		c.broken = true
+		return
+	}
+
+	// Use a standard HTTP client with a timeout of 5 seconds.
+	res, err := c.client.Do(req)
+	if err == nil {
+		defer res.Body.Close()
+		if res.StatusCode == http.StatusOK {
+			c.broken = false
+		} else {
+			c.broken = true
+		}
 	} else {
-		c.broken = false
+		c.broken = true
 	}
 }
 

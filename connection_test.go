@@ -19,7 +19,7 @@ func TestHttpConnection(t *testing.T) {
 	defer server.Close()
 
 	url, _ := url.Parse(server.URL)
-	conn := NewHttpConnection(url)
+	conn := NewHttpConnection(url, http.DefaultClient)
 	if conn == nil {
 		t.Fatal("expected connection")
 	}
@@ -41,7 +41,7 @@ func TestHttpConnectionReturningInternalServerErrorIsBroken(t *testing.T) {
 	server.Close()
 
 	url, _ := url.Parse(server.URL)
-	conn := NewHttpConnection(url)
+	conn := NewHttpConnection(url, http.DefaultClient)
 	if conn == nil {
 		t.Fatal("expected connection")
 	}
@@ -56,7 +56,7 @@ func TestHttpConnectionReturningInternalServerErrorIsBroken(t *testing.T) {
 
 func TestHttpConnectionToNonexistentServer(t *testing.T) {
 	url, _ := url.Parse("http://localhost:12345")
-	conn := NewHttpConnection(url)
+	conn := NewHttpConnection(url, http.DefaultClient)
 	if conn == nil {
 		t.Fatal("expected connection")
 	}
@@ -77,7 +77,7 @@ func TestHttpConnectionHeartbeat(t *testing.T) {
 	defer server.Close()
 
 	url, _ := url.Parse(server.URL)
-	conn := NewHttpConnection(url).HeartbeatDuration(2 * time.Second)
+	conn := NewHttpConnection(url, http.DefaultClient).HeartbeatDuration(2 * time.Second)
 	if conn == nil {
 		t.Fatal("expected connection")
 	}
@@ -89,7 +89,7 @@ func TestHttpConnectionHeartbeat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 0 { // 1 on NewConnection + 1 for a heartbeat
+	if count != 2 { // 1 on NewConnection + 1 for a heartbeat
 		t.Errorf("expected %d heartbeats; got: %d", 2, count)
 	}
 }

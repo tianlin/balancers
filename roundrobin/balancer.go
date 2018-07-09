@@ -7,7 +7,8 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/olivere/balancers"
+	"github.com/tianlin/balancers"
+	"net/http"
 )
 
 // Balancer implements a round-robin balancer.
@@ -32,7 +33,7 @@ func NewBalancer(conns ...balancers.Connection) (balancers.Balancer, error) {
 
 // NewBalancerFromURL creates a new round-robin balancer for the
 // given list of URLs. It returns an error if any of the URLs is invalid.
-func NewBalancerFromURL(urls ...string) (*Balancer, error) {
+func NewBalancerFromURL(client *http.Client, urls ...string) (*Balancer, error) {
 	b := &Balancer{
 		conns: make([]balancers.Connection, 0),
 	}
@@ -40,7 +41,7 @@ func NewBalancerFromURL(urls ...string) (*Balancer, error) {
 		if u, err := url.Parse(rawurl); err != nil {
 			return nil, err
 		} else {
-			b.conns = append(b.conns, balancers.NewHttpConnection(u))
+			b.conns = append(b.conns, balancers.NewHttpConnection(u, client))
 		}
 	}
 	return b, nil
