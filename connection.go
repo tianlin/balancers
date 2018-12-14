@@ -4,6 +4,8 @@
 package balancers
 
 import (
+	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"sync"
@@ -93,6 +95,7 @@ func (c *HttpConnection) checkBroken() {
 	res, err := c.client.Do(req)
 	if err == nil {
 		defer res.Body.Close()
+		io.Copy(ioutil.Discard, res.Body)
 		if res.StatusCode == http.StatusOK {
 			c.broken = false
 		} else {
