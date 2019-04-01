@@ -4,10 +4,12 @@
 package balancers
 
 import (
-	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -32,6 +34,7 @@ type HttpConnection struct {
 	heartbeatDuration time.Duration
 	heartbeatStop     chan bool
 	client            *http.Client
+	logger            *log.Logger
 }
 
 // NewHttpConnection creates a new HTTP connection to the given URL.
@@ -41,6 +44,7 @@ func NewHttpConnection(url *url.URL, client *http.Client) *HttpConnection {
 		heartbeatDuration: DefaultHeartbeatDuration,
 		heartbeatStop:     make(chan bool),
 		client:            client,
+		logger:            log.New(os.Stderr, "", log.LstdFlags),
 	}
 	c.checkBroken()
 	go c.heartbeat()
@@ -85,9 +89,10 @@ func (c *HttpConnection) checkBroken() {
 	c.Lock()
 	defer c.Unlock()
 
-	req, err := http.NewRequest(http.MethodPost, c.url.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, c.url.String(), strings.NewReader(""))
 	if err != nil {
 		c.broken = true
+		c.logger.Printf("Post %s failed: %s", c.url.String(), err.Error())
 		return
 	}
 
@@ -95,14 +100,16 @@ func (c *HttpConnection) checkBroken() {
 	res, err := c.client.Do(req)
 	if err == nil {
 		defer res.Body.Close()
-		io.Copy(ioutil.Discard, res.Body)
+		body, _ := ioutil.ReadAll(res.Body)
 		if res.StatusCode == http.StatusOK {
 			c.broken = false
 		} else {
 			c.broken = true
+			c.logger.Printf("Post %s failed: %s", c.url.String(), string(body))
 		}
 	} else {
 		c.broken = true
+		c.logger.Printf("Post %s failed: %s", c.url.String(), err.Error())
 	}
 }
 
