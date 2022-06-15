@@ -89,7 +89,7 @@ func (c *HttpConnection) checkBroken() {
 	c.Lock()
 	defer c.Unlock()
 
-	req, err := http.NewRequest(http.MethodPost, c.url.String(), strings.NewReader(""))
+	req, err := http.NewRequest(http.MethodOptions, c.url.String(), strings.NewReader(""))
 	if err != nil {
 		c.broken = true
 		c.logger.Printf("Post %s failed: %s", c.url.String(), err.Error())
