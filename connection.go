@@ -35,16 +35,23 @@ type HttpConnection struct {
 	heartbeatStop     chan bool
 	client            *http.Client
 	logger            *log.Logger
+	userAgent         string
 }
 
 // NewHttpConnection creates a new HTTP connection to the given URL.
 func NewHttpConnection(url *url.URL, client *http.Client) *HttpConnection {
+	hbDuration := DefaultHeartbeatDuration
+	if client.Timeout > 0 {
+		hbDuration = client.Timeout
+	}
+
 	c := &HttpConnection{
 		url:               url,
-		heartbeatDuration: DefaultHeartbeatDuration,
+		heartbeatDuration: hbDuration,
 		heartbeatStop:     make(chan bool),
 		client:            client,
 		logger:            log.New(os.Stderr, "", log.LstdFlags),
+		userAgent:         os.Getenv("USER_AGENT"),
 	}
 	c.checkBroken()
 	go c.heartbeat()
@@ -94,6 +101,9 @@ func (c *HttpConnection) checkBroken() {
 		c.broken = true
 		c.logger.Printf("Post %s failed: %s", c.url.String(), err.Error())
 		return
+	}
+	if c.userAgent != "" {
+		req.Header.Set("User-Agent", c.userAgent)
 	}
 
 	// Use a standard HTTP client with a timeout of 5 seconds.
