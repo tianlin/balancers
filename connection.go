@@ -29,29 +29,46 @@ type Connection interface {
 // implementations.
 type HttpConnection struct {
 	sync.Mutex
-	url               *url.URL
-	broken            bool
-	heartbeatDuration time.Duration
-	heartbeatStop     chan bool
-	client            *http.Client
-	logger            *log.Logger
-	userAgent         string
+	url                  *url.URL
+	broken               bool
+	heartbeatStop        chan bool
+	client               *http.Client
+	logger               *log.Logger
+	userAgent            string
+	currentRetryInterval time.Duration
+}
+
+const (
+	// 生产环境的时间间隔
+	initialRetryInterval = 30 * time.Second
+	maxRetryInterval     = 5 * time.Minute
+	retryMultiplier      = 2
+
+	// 测试环境的时间间隔
+	testInitialRetryInterval = 100 * time.Millisecond
+	testMaxRetryInterval     = 500 * time.Millisecond
+)
+
+var testMode bool = false
+
+// 添加测试辅助函数
+func SetTestMode(enabled bool) {
+	testMode = enabled
 }
 
 // NewHttpConnection creates a new HTTP connection to the given URL.
 func NewHttpConnection(url *url.URL, client *http.Client) *HttpConnection {
-	hbDuration := DefaultHeartbeatDuration
-	if client.Timeout > 0 {
-		hbDuration = client.Timeout
+	c := &HttpConnection{
+		url:                  url,
+		heartbeatStop:        make(chan bool),
+		client:               client,
+		logger:               log.New(os.Stderr, "", log.LstdFlags),
+		userAgent:            os.Getenv("USER_AGENT"),
+		currentRetryInterval: initialRetryInterval,
 	}
 
-	c := &HttpConnection{
-		url:               url,
-		heartbeatDuration: hbDuration,
-		heartbeatStop:     make(chan bool),
-		client:            client,
-		logger:            log.New(os.Stderr, "", log.LstdFlags),
-		userAgent:         os.Getenv("USER_AGENT"),
+	if testMode {
+		c.currentRetryInterval = testInitialRetryInterval
 	}
 	c.checkBroken()
 	go c.heartbeat()
@@ -67,28 +84,52 @@ func (c *HttpConnection) Close() error {
 	return nil
 }
 
-// HeartbeatDuration sets the duration in which the connection is checked.
-func (c *HttpConnection) HeartbeatDuration(d time.Duration) *HttpConnection {
-	c.Lock()
-	defer c.Unlock()
-	c.heartbeatStop <- true // wait for heartbeat ticker to stop
-	c.broken = false
-	c.heartbeatDuration = d
-	go c.heartbeat()
-	return c
-}
-
 // heartbeat periodically checks if the connection is broken.
 func (c *HttpConnection) heartbeat() {
-	ticker := time.NewTicker(c.heartbeatDuration)
 	for {
 		select {
-		case <-ticker.C:
+		case <-time.After(c.getNextInterval()):
 			c.checkBroken()
 		case <-c.heartbeatStop:
 			return
 		}
 	}
+}
+
+// getNextInterval returns the next interval for the heartbeat.
+func (c *HttpConnection) getNextInterval() time.Duration {
+	c.Lock()
+	defer c.Unlock()
+
+	if testMode {
+		if !c.broken {
+			c.currentRetryInterval = testInitialRetryInterval
+			return testInitialRetryInterval
+		}
+
+		nextInterval := c.currentRetryInterval * retryMultiplier
+		if nextInterval > testMaxRetryInterval {
+			nextInterval = testMaxRetryInterval
+		}
+		c.currentRetryInterval = nextInterval
+		if c.broken {
+			c.logger.Printf("Connection broken, will retry in %v", nextInterval)
+		}
+		return nextInterval
+	}
+
+	if !c.broken {
+		c.currentRetryInterval = initialRetryInterval
+		return initialRetryInterval
+	}
+
+	nextInterval := c.currentRetryInterval * retryMultiplier
+	if nextInterval > maxRetryInterval {
+		nextInterval = maxRetryInterval
+	}
+	c.currentRetryInterval = nextInterval
+	c.logger.Printf("Connection broken, will retry in %v", nextInterval)
+	return nextInterval
 }
 
 // checkBroken checks if the HTTP connection is alive.
@@ -99,7 +140,7 @@ func (c *HttpConnection) checkBroken() {
 	req, err := http.NewRequest(http.MethodOptions, c.url.String(), strings.NewReader(""))
 	if err != nil {
 		c.broken = true
-		c.logger.Printf("Post %s failed: %s", c.url.String(), err.Error())
+		c.logger.Printf("Failed to create request for %s: %s", c.url.String(), err.Error())
 		return
 	}
 	if c.userAgent != "" {
@@ -115,11 +156,11 @@ func (c *HttpConnection) checkBroken() {
 			c.broken = false
 		} else {
 			c.broken = true
-			c.logger.Printf("Post %s failed: %s", c.url.String(), string(body))
+			c.logger.Printf("Request to %s failed with status %d: %s", c.url.String(), res.StatusCode, string(body))
 		}
 	} else {
 		c.broken = true
-		c.logger.Printf("Post %s failed: %s", c.url.String(), err.Error())
+		c.logger.Printf("Request to %s failed: %s", c.url.String(), err.Error())
 	}
 }
 
