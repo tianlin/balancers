@@ -13,6 +13,44 @@ import (
 	"github.com/tianlin/balancers"
 )
 
+// BalancerOptions 包含负载均衡器的配置选项
+type BalancerOptions struct {
+	client         *http.Client
+	connectTimeout time.Duration
+	retryTimeout   time.Duration
+}
+
+// Option 定义配置选项的函数类型
+type Option func(*BalancerOptions)
+
+// WithClient 设置 HTTP 客户端
+func WithClient(client *http.Client) Option {
+	return func(o *BalancerOptions) {
+		o.client = client
+	}
+}
+
+// WithConnectTimeout 设置连接超时时间
+func WithConnectTimeout(timeout time.Duration) Option {
+	return func(o *BalancerOptions) {
+		o.connectTimeout = timeout
+	}
+}
+
+// WithRetryTimeout 设置重试超时时间
+func WithRetryTimeout(timeout time.Duration) Option {
+	return func(o *BalancerOptions) {
+		o.retryTimeout = timeout
+	}
+}
+
+// 默认选项
+var defaultOptions = BalancerOptions{
+	client:         http.DefaultClient,
+	connectTimeout: 30 * time.Second,
+	retryTimeout:   5 * time.Minute,
+}
+
 // Balancer implements a round-robin balancer.
 type Balancer struct {
 	sync.Mutex // guards the following variables
@@ -33,18 +71,31 @@ func NewBalancer(conns ...balancers.Connection) (balancers.Balancer, error) {
 	return b, nil
 }
 
-// NewBalancerFromURL creates a new round-robin balancer for the
-// given list of URLs. It returns an error if any of the URLs is invalid.
-func NewBalancerFromURL(client *http.Client, urls ...string) (*Balancer, error) {
+// NewBalancerFromURL 使用 Option 模式重构
+func NewBalancerFromURL(urls []string, opts ...Option) (*Balancer, error) {
+	// 使用默认选项
+	options := defaultOptions
+
+	// 应用自定义选项
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	b := &Balancer{
 		conns: make([]balancers.Connection, 0),
 	}
+
 	for _, rawurl := range urls {
-		if u, err := url.Parse(rawurl); err != nil {
+		u, err := url.Parse(rawurl)
+		if err != nil {
 			return nil, err
-		} else {
-			b.conns = append(b.conns, balancers.NewHttpConnection(u, client, 30*time.Second, 5*time.Minute))
 		}
+		b.conns = append(b.conns, balancers.NewHttpConnection(
+			u,
+			options.client,
+			options.connectTimeout,
+			options.retryTimeout,
+		))
 	}
 	return b, nil
 }

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/tianlin/balancers"
 )
@@ -17,8 +18,8 @@ func TestNewBalancer(t *testing.T) {
 	url2, _ := url.Parse("http://127.0.0.1:23456")
 
 	balancer, err := NewBalancer(
-		balancers.NewHttpConnection(url1, http.DefaultClient),
-		balancers.NewHttpConnection(url2, http.DefaultClient))
+		balancers.NewHttpConnection(url1, http.DefaultClient, 30*time.Second, 5*time.Minute),
+		balancers.NewHttpConnection(url2, http.DefaultClient, 30*time.Second, 5*time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +63,12 @@ func TestBalancer(t *testing.T) {
 	}))
 	defer server2.Close()
 
-	balancer, err := NewBalancerFromURL(http.DefaultClient, server1.URL, server2.URL)
+	balancer, err := NewBalancerFromURL(
+		[]string{server1.URL, server2.URL},
+		WithClient(http.DefaultClient),
+		WithConnectTimeout(30*time.Second),
+		WithRetryTimeout(5*time.Minute),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +105,17 @@ func TestBalancerWithBrokenConnections(t *testing.T) {
 	}))
 	defer server2.Close()
 
-	balancer, err := NewBalancerFromURL(http.DefaultClient, server1.URL, "http://localhost:12345", server2.URL, "http://localhost:12346")
+	balancer, err := NewBalancerFromURL(
+		[]string{
+			server1.URL,
+			"http://localhost:12345",
+			server2.URL,
+			"http://localhost:12346",
+		},
+		WithClient(http.DefaultClient),
+		WithConnectTimeout(30*time.Second),
+		WithRetryTimeout(5*time.Minute),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +155,10 @@ func TestBalancerRewritesSchemeAndURLButNotPathOrQuery(t *testing.T) {
 	}))
 	defer server.Close()
 
-	balancer, err := NewBalancerFromURL(http.DefaultClient, server.URL)
+	balancer, err := NewBalancerFromURL(
+		[]string{server.URL},
+		// 使用默认选项，不需要传入任何 Option
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
