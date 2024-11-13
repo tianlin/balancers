@@ -107,7 +107,7 @@ func (c *HttpConnection) checkBroken() {
 	c.Lock()
 	defer c.Unlock()
 
-	req, err := http.NewRequest(http.MethodOptions, c.url.String(), strings.NewReader(""))
+	req, err := http.NewRequest("OPTIONS", c.url.String(), strings.NewReader(""))
 	if err != nil {
 		c.broken = true
 		c.logger.Printf("Failed to create request for %s: %s", c.url.String(), err.Error())
