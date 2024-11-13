@@ -4,6 +4,7 @@
 package roundrobin
 
 import (
+	"errors"
 	"net/url"
 	"sync"
 	"time"
@@ -77,6 +78,17 @@ func NewBalancerFromURL(urls []string, opts ...Option) (*Balancer, error) {
 
 	for _, opt := range opts {
 		opt(&options)
+	}
+
+	// 检查重试间隔配置的合法性
+	if options.initialRetryInterval <= 0 {
+		return nil, errors.New("initial retry interval must be greater than 0")
+	}
+	if options.maxRetryInterval <= 0 {
+		return nil, errors.New("max retry interval must be greater than 0")
+	}
+	if options.maxRetryInterval < options.initialRetryInterval {
+		return nil, errors.New("max retry interval must be greater than or equal to initial retry interval")
 	}
 
 	b := &Balancer{
