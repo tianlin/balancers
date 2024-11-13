@@ -15,9 +15,9 @@ import (
 
 // BalancerOptions 包含负载均衡器的配置选项
 type BalancerOptions struct {
-	client         *http.Client
-	connectTimeout time.Duration
-	retryTimeout   time.Duration
+	client               *http.Client
+	initialRetryInterval time.Duration
+	maxRetryInterval     time.Duration
 }
 
 // Option 定义配置选项的函数类型
@@ -30,25 +30,25 @@ func WithClient(client *http.Client) Option {
 	}
 }
 
-// WithConnectTimeout 设置连接超时时间
-func WithConnectTimeout(timeout time.Duration) Option {
+// WithInitialRetryInterval 设置初始重试间隔时间
+func WithInitialRetryInterval(interval time.Duration) Option {
 	return func(o *BalancerOptions) {
-		o.connectTimeout = timeout
+		o.initialRetryInterval = interval
 	}
 }
 
-// WithRetryTimeout 设置重试超时时间
-func WithRetryTimeout(timeout time.Duration) Option {
+// WithMaxRetryInterval 设置最大重试间隔时间
+func WithMaxRetryInterval(interval time.Duration) Option {
 	return func(o *BalancerOptions) {
-		o.retryTimeout = timeout
+		o.maxRetryInterval = interval
 	}
 }
 
 // 默认选项
 var defaultOptions = BalancerOptions{
-	client:         http.DefaultClient,
-	connectTimeout: 30 * time.Second,
-	retryTimeout:   5 * time.Minute,
+	client:               http.DefaultClient,
+	initialRetryInterval: 30 * time.Second,
+	maxRetryInterval:     5 * time.Minute,
 }
 
 // Balancer implements a round-robin balancer.
@@ -73,10 +73,8 @@ func NewBalancer(conns ...balancers.Connection) (balancers.Balancer, error) {
 
 // NewBalancerFromURL 使用 Option 模式重构
 func NewBalancerFromURL(urls []string, opts ...Option) (*Balancer, error) {
-	// 使用默认选项
 	options := defaultOptions
 
-	// 应用自定义选项
 	for _, opt := range opts {
 		opt(&options)
 	}
@@ -93,8 +91,8 @@ func NewBalancerFromURL(urls []string, opts ...Option) (*Balancer, error) {
 		b.conns = append(b.conns, balancers.NewHttpConnection(
 			u,
 			options.client,
-			options.connectTimeout,
-			options.retryTimeout,
+			options.initialRetryInterval,
+			options.maxRetryInterval,
 		))
 	}
 	return b, nil

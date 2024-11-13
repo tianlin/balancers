@@ -66,8 +66,8 @@ func TestBalancer(t *testing.T) {
 	balancer, err := NewBalancerFromURL(
 		[]string{server1.URL, server2.URL},
 		WithClient(http.DefaultClient),
-		WithConnectTimeout(30*time.Second),
-		WithRetryTimeout(5*time.Minute),
+		WithInitialRetryInterval(30*time.Second),
+		WithMaxRetryInterval(5*time.Minute),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -113,8 +113,8 @@ func TestBalancerWithBrokenConnections(t *testing.T) {
 			"http://localhost:12346",
 		},
 		WithClient(http.DefaultClient),
-		WithConnectTimeout(30*time.Second),
-		WithRetryTimeout(5*time.Minute),
+		WithInitialRetryInterval(30*time.Second),
+		WithMaxRetryInterval(5*time.Minute),
 	)
 	if err != nil {
 		t.Fatal(err)
