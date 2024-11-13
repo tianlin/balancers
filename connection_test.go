@@ -11,6 +11,12 @@ import (
 	"time"
 )
 
+const (
+	// 测试环境的时间间隔
+	testInitialRetryInterval = 100 * time.Millisecond
+	testMaxRetryInterval     = 500 * time.Millisecond
+)
+
 func TestHttpConnection(t *testing.T) {
 	var visited bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -19,7 +25,7 @@ func TestHttpConnection(t *testing.T) {
 	defer server.Close()
 
 	url, _ := url.Parse(server.URL)
-	conn := NewHttpConnection(url, http.DefaultClient)
+	conn := NewHttpConnection(url, http.DefaultClient, 30*time.Second, 5*time.Minute)
 	if conn == nil {
 		t.Fatal("expected connection")
 	}
@@ -47,7 +53,7 @@ func TestHttpConnectionReturningInternalServerErrorIsBroken(t *testing.T) {
 	defer server.Close()
 
 	url, _ := url.Parse(server.URL)
-	conn := NewHttpConnection(url, http.DefaultClient)
+	conn := NewHttpConnection(url, http.DefaultClient, 30*time.Second, 5*time.Minute)
 	if conn == nil {
 		t.Fatal("expected connection")
 	}
@@ -65,7 +71,7 @@ func TestHttpConnectionReturningInternalServerErrorIsBroken(t *testing.T) {
 
 func TestHttpConnectionToNonexistentServer(t *testing.T) {
 	url, _ := url.Parse("http://localhost:12345")
-	conn := NewHttpConnection(url, http.DefaultClient)
+	conn := NewHttpConnection(url, http.DefaultClient, 30*time.Second, 5*time.Minute)
 	if conn == nil {
 		t.Fatal("expected connection")
 	}
@@ -79,10 +85,6 @@ func TestHttpConnectionToNonexistentServer(t *testing.T) {
 }
 
 func TestHttpConnectionExponentialBackoff(t *testing.T) {
-	// 启用测试模式
-	SetTestMode(true)
-	defer SetTestMode(false) // 测试结束后恢复
-
 	var requestTimes []time.Time
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestTimes = append(requestTimes, time.Now())
@@ -91,7 +93,7 @@ func TestHttpConnectionExponentialBackoff(t *testing.T) {
 	defer server.Close()
 
 	url, _ := url.Parse(server.URL)
-	conn := NewHttpConnection(url, http.DefaultClient)
+	conn := NewHttpConnection(url, http.DefaultClient, testInitialRetryInterval, testMaxRetryInterval)
 
 	// 等待足够长的时间以观察多次重试
 	time.Sleep(700 * time.Millisecond) // 等待时间缩短到毫秒级别

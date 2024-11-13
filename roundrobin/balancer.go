@@ -6,9 +6,11 @@ package roundrobin
 import (
 	"net/url"
 	"sync"
+	"time"
+
+	"net/http"
 
 	"github.com/tianlin/balancers"
-	"net/http"
 )
 
 // Balancer implements a round-robin balancer.
@@ -41,7 +43,7 @@ func NewBalancerFromURL(client *http.Client, urls ...string) (*Balancer, error) 
 		if u, err := url.Parse(rawurl); err != nil {
 			return nil, err
 		} else {
-			b.conns = append(b.conns, balancers.NewHttpConnection(u, client))
+			b.conns = append(b.conns, balancers.NewHttpConnection(u, client, 30*time.Second, 5*time.Minute))
 		}
 	}
 	return b, nil

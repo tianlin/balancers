@@ -36,40 +36,27 @@ type HttpConnection struct {
 	logger               *log.Logger
 	userAgent            string
 	currentRetryInterval time.Duration
+	initialRetryInterval time.Duration
+	maxRetryInterval     time.Duration
 }
 
 const (
-	// 生产环境的时间间隔
-	initialRetryInterval = 30 * time.Second
-	maxRetryInterval     = 5 * time.Minute
-	retryMultiplier      = 2
-
-	// 测试环境的时间间隔
-	testInitialRetryInterval = 100 * time.Millisecond
-	testMaxRetryInterval     = 500 * time.Millisecond
+	retryMultiplier = 2
 )
 
-var testMode bool = false
-
-// 添加测试辅助函数
-func SetTestMode(enabled bool) {
-	testMode = enabled
-}
-
 // NewHttpConnection creates a new HTTP connection to the given URL.
-func NewHttpConnection(url *url.URL, client *http.Client) *HttpConnection {
+func NewHttpConnection(url *url.URL, client *http.Client, initialRetry time.Duration, maxRetry time.Duration) *HttpConnection {
 	c := &HttpConnection{
 		url:                  url,
 		heartbeatStop:        make(chan bool),
 		client:               client,
 		logger:               log.New(os.Stderr, "", log.LstdFlags),
 		userAgent:            os.Getenv("USER_AGENT"),
-		currentRetryInterval: initialRetryInterval,
+		currentRetryInterval: initialRetry,
+		initialRetryInterval: initialRetry,
+		maxRetryInterval:     maxRetry,
 	}
 
-	if testMode {
-		c.currentRetryInterval = testInitialRetryInterval
-	}
 	c.checkBroken()
 	go c.heartbeat()
 	return c
@@ -101,31 +88,14 @@ func (c *HttpConnection) getNextInterval() time.Duration {
 	c.Lock()
 	defer c.Unlock()
 
-	if testMode {
-		if !c.broken {
-			c.currentRetryInterval = testInitialRetryInterval
-			return testInitialRetryInterval
-		}
-
-		nextInterval := c.currentRetryInterval * retryMultiplier
-		if nextInterval > testMaxRetryInterval {
-			nextInterval = testMaxRetryInterval
-		}
-		c.currentRetryInterval = nextInterval
-		if c.broken {
-			c.logger.Printf("Connection broken, will retry in %v", nextInterval)
-		}
-		return nextInterval
-	}
-
 	if !c.broken {
-		c.currentRetryInterval = initialRetryInterval
-		return initialRetryInterval
+		c.currentRetryInterval = c.initialRetryInterval
+		return c.initialRetryInterval
 	}
 
 	nextInterval := c.currentRetryInterval * retryMultiplier
-	if nextInterval > maxRetryInterval {
-		nextInterval = maxRetryInterval
+	if nextInterval > c.maxRetryInterval {
+		nextInterval = c.maxRetryInterval
 	}
 	c.currentRetryInterval = nextInterval
 	c.logger.Printf("Connection broken, will retry in %v", nextInterval)

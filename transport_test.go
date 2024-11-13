@@ -66,7 +66,7 @@ func TestModifyRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		conn := NewHttpConnection(url, http.DefaultClient)
+		conn := NewHttpConnection(url, http.DefaultClient, 0, 0)
 
 		err = modifyRequest(req, conn)
 		if err != test.Expected {
